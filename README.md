@@ -111,7 +111,7 @@ git push origin main
 ```
 
 ## Contributors
-- **Your Name** - Developer
+- **Your Name** - Sohan Mulamalla
 
 ## License
 This project is licensed under the MIT License.
