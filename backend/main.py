@@ -1,19 +1,33 @@
+import logging
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 import requests
 from transformers import pipeline
 from dotenv import load_dotenv
 import os
+
+# Suppress warnings from the transformers library
+logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # Load environment variables (API keys)
 load_dotenv()
 
 app = FastAPI()
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Allow your frontend origin
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
+
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 # Load NLP summarization model
-summarizer = pipeline("summarization")
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")  # Use a better model
 
 @app.get("/news/")
 def get_news(topic: str = Query(..., title="Topic", description="Enter a topic of interest")):
@@ -36,7 +50,29 @@ def get_news(topic: str = Query(..., title="Topic", description="Enter a topic o
     
     news_summaries = []
     for article in data["articles"]:
-        summary = summarizer(article["description"][:512], max_length=50, min_length=10, do_sample=False)[0]["summary_text"]
+        description = article.get("description", "")
+        
+        # Skip if description is empty
+        if not description:
+            news_summaries.append({
+                "title": article["title"],
+                "summary": "No description available.",
+                "url": article["url"],
+                "published_at": article["publishedAt"]
+            })
+            continue
+        
+        # Summarize the description
+        try:
+            summary = summarizer(
+                description[:512],  # Truncate input to 512 tokens
+                max_length=100,     # Increase max_length for longer summaries
+                min_length=30,       # Increase min_length to avoid very short summaries
+                do_sample=False
+            )[0]["summary_text"]
+        except Exception as e:
+            summary = description  # Fallback to the original description if summarization fails
+        
         news_summaries.append({
             "title": article["title"],
             "summary": summary,
